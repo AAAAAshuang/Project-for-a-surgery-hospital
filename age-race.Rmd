@@ -1,0 +1,210 @@
+---
+title: "EyeProject"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(openxlsx)
+library(ggplot2)
+library(dplyr)
+library(stringr)
+library(tidyverse)
+library(lubridate)
+
+#setwd("~/Desktop/Eyesthetica/Eyesthetica USC Project")
+```
+
+```{r}
+#Load data
+demo = read.xlsx('ChartDemographics.xlsx', sheet = 1)
+democb = read.xlsx('ChartDemographics.xlsx', sheet = 2)
+
+service = read.xlsx('ServiceItemSummary.xlsx', sheet = 1)
+servicecb = read.xlsx('ServiceItemSummary.xlsx', sheet = 2)
+```
+
+```{r}
+demo = distinct(demo, Per.Nbr, .keep_all = TRUE)
+data = left_join(service, demo, by = c('Per.Nbr' = 'Per.Nbr'))
+data$Per.Nbr = as.numeric(data$Per.Nbr)
+summary(data$Per.Nbr)
+```
+
+```{r}
+unique(data$Migrant.Worker.Status)
+unique(data$Language.Barrier)
+unique(data$Church)
+unique(data$Homeless.Status)
+
+# all those variables are null completely, so delete this unuseful information
+data$Migrant.Worker.Status = NULL
+data$Homeless.Status = NULL
+data$Language.Barrier= NULL
+data$Church = NULL
+
+data$Gen = as.factor(data$Gen)
+data$Mar = as.factor(data$Mar)
+data$Smk = as.factor(data$Smk)
+data$Race =as.factor(data$Race)
+data$Ethnicity = as.factor(data$Ethnicity)
+data$Religion = as.factor(data$Religion)
+data$Preferred.Language = as.factor(data$Preferred.Language)
+#data$Mrkt.Plan.Name = as.factor(data$Mrkt.Plan.Name)
+data$Mrkt.Plan.Type.x = as.factor(data$Mrkt.Plan.Type.x)
+data$Mrkt.Plan.Type.y = as.factor(data$Mrkt.Plan.Type.y)
+data$Mrkt.Plan.Name.x = as.factor(data$Mrkt.Plan.Name.x)
+data$Mrkt.Plan.Name.y = as.factor(data$Mrkt.Plan.Name.y)
+
+data$Department = as.factor(data$Department)
+data$Fin.Class = as.factor(data$Fin.Class)
+data$Sv.It = as.factor(data$Sv.It)
+data$Sv.It.Desc = as.factor(data$Sv.It.Desc)
+
+# Only 8 people are self-identified as smokers. Others are unspecified as NA
+data$Vet = as.factor(data$Vet)
+# Only 2 people are self-identified as veteran. Others are unspecified as NA
+
+data$Zip.x = as.numeric(data$Zip.x)
+data$Zip.y = NULL
+
+abs(-9)
+
+
+eye = data %>%
+  filter(Type.of.Procedure=="Cosmetic")%>%
+  group_by(Per.Nbr) %>% summarise(totcha = sum(Chg.Amt),totpay=abs(sum(Pay.Amt)))
+age = service %>% 
+  filter(Type.of.Procedure=="Cosmetic")%>%
+  select(Per.Nbr, Pat.Age) %>%
+  filter(!is.na(Per.Nbr)) %>% distinct(Per.Nbr, Pat.Age)
+age$Per.Nbr = as.numeric(age$Per.Nbr)
+demo$Per.Nbr = as.numeric(demo$Per.Nbr)
+
+eye = left_join(age, eye, by=c('Per.Nbr'='Per.Nbr'))
+
+alldata = left_join(eye, demo, by = c('Per.Nbr' = 'Per.Nbr'))
+
+alldata = alldata %>% filter(!is.na(Per.Nbr))
+
+alldata=alldata%>%
+  mutate(language=ifelse(Preferred.Language=='Spanish'|Preferred.Language=='Spanish;Castilian','Spanish',
+                       ifelse(Preferred.Language=='Chinese'|Preferred.Language=='Mandarin', 'Chinese',
+                              ifelse(Preferred.Language=='French','French',
+                                     ifelse(Preferred.Language=='German','German',
+                                            ifelse(Preferred.Language=='Japanese','Japanese',
+                                                   ifelse(Preferred.Language=='Russian','Russian',
+                                                          ifelse(Preferred.Language=='Korean','Korean',
+                                                                 ifelse(Preferred.Language=='Arabic','Arabian',
+                                                                        ifelse(Preferred.Language=='Thai','Thai',
+                                                                               ifelse(Preferred.Language=='Somali','Somali',
+                                                                                    ifelse(Preferred.Language=='Vietnamese','Vietnamese',
+      ifelse(Preferred.Language=='English','American',
+             ifelse(Preferred.Language=='Central Khmer','Central Khmer',
+                    ifelse(is.na(Preferred.Language)=='TRUE','unknown',
+                    'unknown')))))))))))))))
+
+alldata %>% filter(Race == c("Asian","Black or African American", "White"), totcha <= 20000) %>%
+ ggplot(aes(x = as.numeric(totcha), y = ..density.., color = Race)) +
+  geom_line(stat = 'density')
+
+alldata %>% filter(Race == c("Asian","Black or African American", "White"), totcha >= 20000) %>%
+ ggplot(aes(x = as.numeric(totcha), y = ..density.., color = Race)) +
+  geom_line(stat = 'density')
+
+```
+individuals who are opting for cosmetic surgery
+
+```{r}
+se.it = data %>% 
+  filter(Department == "Cosmetic") %>% 
+  group_by(Sv.It.Desc) %>% 
+  summarise(n())
+```
+
+```{r}
+alldata$Age = str_remove_all(alldata$Pat.Age," yrs.")
+
+alldata$Age=as.numeric(alldata$Age)
+alldata%>%
+  filter(country %in% c('Chinese','Japanese','Korean','Spanish','Thai','French','German','Russian'))%>%
+# filter(Race %in% c('Hispanic','Asian','White','Black or African American','Declined to Specify','Indian','Other Race'))%>%
+  group_by(country)%>%
+  summarise(avg=mean(totpay))%>%
+  ggplot(aes(x=country,y=avg))+
+  geom_col()
+
+```
+
+```{r}
+
+alldata%>%
+  filter(Race=='Asian')%>%
+  group_by(Age)%>%
+  summarise(avg=mean(totcha,na.rm=TRUE))%>%
+  ggplot(aes(x=Age,y=avg))+
+  geom_col()+
+  theme(axis.text.x = element_text(angle = 45, size=9,hjust = 0.5, vjust = 0.5))
+
+
+
+
+```
+
+```{r}
+alldata%>%
+  filter(Race=='Black or African American')%>%
+  group_by(Age)%>%
+  summarise(avg=mean(totcha,na.rm=TRUE))%>%
+  ggplot(aes(x=Age,y=avg))+
+  geom_col()+
+  theme(axis.text.x = element_text(angle = 45, size=9,hjust = 0.5, vjust = 0.5))
+```
+
+```{r}
+alldata%>%
+  filter(Race=='White')%>%
+  group_by(Age)%>%
+  summarise(avg=mean(totcha,na.rm=TRUE))%>%
+  ggplot(aes(x=Age,y=avg))+
+  geom_col()+
+  theme(axis.text.x = element_text(angle = 45, size=9,hjust = 0.5, vjust = 0.5))
+```
+
+```{r}
+alldata$Age = str_remove_all(alldata$Pat.Age," yrs.")
+
+alldata$Age=as.numeric(alldata$Age)
+alldata%>%
+  filter(Race=='Hispanic')%>%
+  group_by(Age)%>%
+  summarise(avg=mean(totcha,na.rm=TRUE))%>%
+  ggplot(aes(x=Age,y=avg))+
+  geom_col()+
+  theme(axis.text.x = element_text(angle = 45, size=9,hjust = 0.5, vjust = 0.5))
+```
+
+```{r}
+alldata%>%
+  filter(Race=='Indian')%>%
+  group_by(Age)%>%
+  summarise(avg=mean(totcha,na.rm=TRUE))%>%
+  ggplot(aes(x=Age,y=avg))+
+  geom_col()+
+  theme(axis.text.x = element_text(angle = 45, size=9,hjust = 0.5, vjust = 0.5))
+```
+
+```{r}
+alldata%>%
+  filter(Race=='Other Race')%>%
+  group_by(Age)%>%
+  summarise(avg=mean(totcha,na.rm=TRUE))%>%
+  ggplot(aes(x=Age,y=avg))+
+  geom_col()+
+  theme(axis.text.x = element_text(angle = 45, size=9,hjust = 0.5, vjust = 0.5))
+```
+
+
